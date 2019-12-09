@@ -1,0 +1,1 @@
+NUM_OF_STREAMS = 1
