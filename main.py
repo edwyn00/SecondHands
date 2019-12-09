@@ -4,5 +4,8 @@ from CONFIG import *
 from LIBRARIES import *
 
 
+cameraThread = camThread("CameraTest", 1)
 
-print(np.array([1,2]))
+while(True):
+    print(cameraThread.getNextSecondFrames().shape)
+    time.sleep(1)
