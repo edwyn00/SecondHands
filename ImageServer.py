@@ -29,7 +29,7 @@ class camThread(threading.Thread):
 
         self.frameIndex = 0
         self.timeIndex = 0
-        self.cameraBuffer = {}
+        self.cameraBuffer = []
         self.tempBuffer = []
 
         self.topIndex = 0
@@ -41,8 +41,8 @@ class camThread(threading.Thread):
     def run(self):
         print("Starting:", self.name)
 
-        self.cam = cv2.VideoCapture(camID)
-        self.fps = cam.get(cv2.cv.CV_CAP_PROP_FPS)
+        self.cam = cv2.VideoCapture(self.camID)
+        self.fps = self.cam.get(cv2.CAP_PROP_FPS)
 
         # Try to get the first frame
         if self.cam.isOpened():
@@ -52,33 +52,32 @@ class camThread(threading.Thread):
             rval = False
 
         while rval:
-            rval, frame = cam.read()
+            rval, frame = self.cam.read()
             self.newFrame(frame)
 
             if self.frameIndex % self.fps == 0:
                 self.newSecond()
 
     def newFrame(self, frame):
-        self.tempBuffer.append(np.array(camera))
+        self.tempBuffer.append(np.array(frame))
         self.frameIndex += 1
 
     def newSecond(self):
-        self.cameraBuffer[self.timeIndex] = self.tempBuffer
+        self.cameraBuffer.append(np.stack(self.tempBuffer))
         self.tempBuffer = []
         self.timeIndex += 1
         self.frameIndex = 0
 
         if self.timeIndex - self.topIndex > self.maxBufferSize:
-            counter = self.bufferReduction
-            for key in self.cameraBuffer.keys():
-                del self.cameraBuffer[key]
-                counter -= 1
-                if counter == 0:
-                    break
+            for index in range(self.bufferReduction):
+                self.cameraBuffer.pop(index)
             self.topIndex += self.bufferReduction
 
 
     def getNextSecondFrames(self):
-        nextSecond = cameraBuffer[self.nextSecondIndex]
+        try:
+            nextSecond = self.cameraBuffer[self.nextSecondIndex-self.topIndex]
+        except:
+            nextSecond = np.zeros((1,1,1))
         self.nextSecondIndex += 1
         return nextSecond
