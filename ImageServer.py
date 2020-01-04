@@ -1,83 +1,50 @@
-from LIBRARIES import *
-from CONFIG import *
-
-'''
-Two modalities needed:
-1. Continuous Stream from multiple cameras
-2. Similated streams from multiple Video sources
-
-Central function: getNextSecondFrames()
-Return all the frames related to the last second of recording
-Multithreading function needed
+from LIBRARIES  import *
+from CONFIG     import *
 
 
-'''
+class ImageServer(threading.Thread):
 
-#########################
-#   SINGLE THREAD MOD   #
-#########################
-
-class camThread(threading.Thread):
-
-    def __init__(self, name, camID):
+    def __init__(self, name, n_cams, event):
         threading.Thread.__init__(self)
-        self.name = name
-        self.camID = camID
+        self.name   = name
+        self.n_cams = n_cams
+        self.event  = event
 
-        self.cam = None
-        self.fps = 0
+        self.singleCamEvents    = []
+        self.singleCamNames     = []
+        self.singleCamIds       = []
+        self.singleCamThread    = []
 
-        self.frameIndex = 0
-        self.timeIndex = 0
-        self.cameraBuffer = []
-        self.tempBuffer = []
+        self.allFrames = []
 
-        self.topIndex = 0
-        self.maxBufferSize = MAX_BUFFER_SIZE
-        self.bufferReduction = BUFFER_REDUCTION
+        for i in range(self.n_cams):
+            self.singleCamEvents.append(threading.Event())
+            self.singleCamNames.append(("cam"+str(i)))
+            self.singleCamIds.append(i)
+            camT = camThread(  self.singleCamNames[i],\
+                                    self.singleCamIds[i]  ,\
+                                    self.singleCamEvents[i])
+            self.singleCamThread.append(camT)
 
-        self.nextSecondIndex = 0
+
+
 
     def run(self):
-        print("Starting:", self.name)
+        for i in range(self.n_cams):
+            print("Starting:", self.singleCamNames[i])
+            self.singleCamThread[i].start()
+        time.sleep(3)
 
-        self.cam = cv2.VideoCapture(self.camID)
-        self.fps = self.cam.get(cv2.CAP_PROP_FPS)
-
-        # Try to get the first frame
-        if self.cam.isOpened():
-            rval, frame = self.cam.read()
-            self.newFrame(frame)
-        else:
-            rval = False
-
-        while rval:
-            rval, frame = self.cam.read()
-            self.newFrame(frame)
-
-            if self.frameIndex % self.fps == 0:
-                self.newSecond()
-
-    def newFrame(self, frame):
-        self.tempBuffer.append(np.array(frame))
-        self.frameIndex += 1
-
-    def newSecond(self):
-        self.cameraBuffer.append(np.stack(self.tempBuffer))
-        self.tempBuffer = []
-        self.timeIndex += 1
-        self.frameIndex = 0
-
-        if self.timeIndex - self.topIndex > self.maxBufferSize:
-            for index in range(self.bufferReduction):
-                self.cameraBuffer.pop(index)
-            self.topIndex += self.bufferReduction
-
+        while(True):
+            while all(singleEvent.isSet() for singleEvent in self.singleCamEvents):
+                self.allFrames = []
+                for i in range(self.n_cams):
+                    frames = self.singleCamThread[i].getNextSecondFrames()
+                    self.singleCamEvents[i].clear()
+                    self.allFrames.append(frames)
+                self.allFrames = np.stack(self.allFrames, axis=0)
+                print("Sending shape:", self.allFrames.shape)
+                self.event.set()
 
     def getNextSecondFrames(self):
-        try:
-            nextSecond = self.cameraBuffer[self.nextSecondIndex-self.topIndex]
-        except:
-            nextSecond = np.zeros((1,1,1))
-        self.nextSecondIndex += 1
-        return nextSecond
+        return self.allFrames
